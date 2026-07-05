@@ -12,16 +12,31 @@ EMAIL_TO = os.environ["EMAIL_TO"]
 
 
 def get_weekly_return(ticker):
-    data = yf.download(ticker, period="7d", progress=False)
+    try:
+        data = yf.download(ticker, period="7d", progress=False, auto_adjust=True)
 
-    if data.empty or len(data) < 2:
+        if data.empty or len(data) < 2:
+            return None
+
+        close = data["Close"]
+
+        # 兼容 yfinance 有时候返回多层表格的情况
+        if hasattr(close, "columns"):
+            close = close.iloc[:, 0]
+
+        close = close.dropna()
+
+        if len(close) < 2:
+            return None
+
+        start_price = float(close.iloc[0])
+        end_price = float(close.iloc[-1])
+
+        return round((end_price / start_price - 1) * 100, 2)
+
+    except Exception as e:
+        print(f"Failed to fetch {ticker}: {e}")
         return None
-
-    start_price = float(data["Close"].iloc[0])
-    end_price = float(data["Close"].iloc[-1])
-
-    return round((end_price / start_price - 1) * 100, 2)
-
 
 def format_perf(perf_dict):
     lines = []
