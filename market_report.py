@@ -4,15 +4,11 @@ import smtplib
 from email.mime.text import MIMEText
 
 import yfinance as yf
-from openai import OpenAI
 
 
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 EMAIL_USER = os.environ["EMAIL_USER"]
 EMAIL_PASS = os.environ["EMAIL_PASS"]
 EMAIL_TO = os.environ["EMAIL_TO"]
-
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def get_weekly_return(ticker):
@@ -69,36 +65,13 @@ stock_perf = {name: get_weekly_return(ticker) for name, ticker in stocks.items()
 market_text = format_perf(market_perf)
 stock_text = format_perf(stock_perf)
 
-prompt = f"""
-你是一名稳健、长期主义风格的全球市场分析师。
-
-请基于以下一周市场数据，写一份简短中文投资市场周报。
-
-要求：
-1. 不要给短线交易建议。
-2. 不要预测市场一定上涨或下跌。
-3. 重点解释市场情绪、风险偏好、科技股表现、全球主要市场相对强弱。
-4. 语言适合长期指数投资者阅读。
-5. 总长度控制在 400-600 中文字。
-
-美国与全球主要市场一周表现：
-{market_text}
-
-美国头部公司一周表现：
-{stock_text}
-"""
-
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "system", "content": "你是专业但克制的投资市场分析师。"},
-        {"role": "user", "content": prompt},
-    ],
-)
-
-analysis = response.choices[0].message.content
-
 today = datetime.date.today()
+
+simple_summary = """
+简短说明：
+本周报先采用无 AI 版本，只展示主要市场和美国头部公司的近一周涨跌幅。
+后续如果接入 OpenAI API 或其他大模型 API，可以自动生成更自然的中文市场解读。
+"""
 
 body = f"""
 投资市场周报
@@ -110,10 +83,10 @@ body = f"""
 二、美国头部公司表现
 {stock_text}
 
-三、简短市场解读
-{analysis}
+三、说明
+{simple_summary}
 
-说明：
+免责声明：
 本邮件为自动生成的市场信息整理，不构成投资建议。
 """
 
