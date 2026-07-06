@@ -29,7 +29,6 @@ def get_weekly_return(ticker):
 
         close = data["Close"]
 
-        # 兼容 yfinance 有时候返回多层表格的情况
         if hasattr(close, "columns"):
             close = close.iloc[:, 0]
 
@@ -46,17 +45,6 @@ def get_weekly_return(ticker):
     except Exception as e:
         print(f"Failed to fetch {ticker}: {e}")
         return None
-
-
-def format_perf_text(perf_dict):
-    lines = []
-    for name, value in perf_dict.items():
-        if value is None:
-            lines.append(f"- {name}: 数据不足")
-        else:
-            sign = "+" if value >= 0 else ""
-            lines.append(f"- {name}: {sign}{value}%")
-    return "\n".join(lines)
 
 
 def perf_label(value):
@@ -76,12 +64,38 @@ def perf_color(value):
     return "#555555"
 
 
+def format_perf_text(perf_dict):
+    lines = []
+    for name, value in perf_dict.items():
+        lines.append(f"{name}: {perf_label(value)}")
+    return "\n".join(lines)
+
+
+def get_movers(perf_dict, top_n=2):
+    valid_items = [(name, value) for name, value in perf_dict.items() if value is not None]
+
+    if not valid_items:
+        return "数据不足"
+
+    sorted_items = sorted(valid_items, key=lambda x: x[1])
+    losers = sorted_items[:top_n]
+    gainers = sorted_items[-top_n:][::-1]
+
+    gainers_text = "；".join([f"{name} {perf_label(value)}" for name, value in gainers])
+    losers_text = "；".join([f"{name} {perf_label(value)}" for name, value in losers])
+
+    return f"涨幅较大：{gainers_text}\n跌幅较大：{losers_text}"
+
+
 def build_table(title, perf_dict):
     rows = ""
+
     for name, value in perf_dict.items():
         rows += f"""
         <tr>
-            <td style="padding:10px 12px;border-bottom:1px solid #eeeeee;color:#222222;">{escape(name)}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #eeeeee;color:#222222;">
+                {escape(name)}
+            </td>
             <td style="padding:10px 12px;border-bottom:1px solid #eeeeee;text-align:right;font-weight:700;color:{perf_color(value)};">
                 {escape(perf_label(value))}
             </td>
@@ -100,37 +114,47 @@ def build_table(title, perf_dict):
     """
 
 
-def generate_ai_summary(market_text, stock_text):
+def generate_ai_summary(market_brief, sector_movers, stock_movers):
     prompt = f"""
-你是一名稳健、长期主义风格的全球市场分析师。
-
-请基于以下一周市场数据，写一份简短中文投资市场周报。
+请用中文写一段简短投资市场周报，面向长期指数投资者。
 
 要求：
-1. 不要给短线交易建议。
-2. 不要预测市场一定上涨或下跌。
-3. 重点解释市场情绪、风险偏好、科技股表现、美国与非美国市场相对强弱。
-4. 语言适合长期指数投资者阅读。
-5. 总长度控制在 350-550 中文字。
-6. 最后加一句“长期投资者本周可关注：……”。
-7. 不要使用 Markdown 表格。
+- 250到400字。
+- 不给买卖建议。
+- 不预测市场一定涨跌。
+- 点评美国大盘、非美国主要市场、头部公司表现。
+- 必须提到本周异常波动：哪些板块或个股涨跌较明显。
+- 对异常波动只做克制解释，不编造具体新闻原因。
+- 最后加一句：长期投资者本周可关注：……
 
-美国与全球主要市场一周表现：
-{market_text}
+主要市场：
+{market_brief}
 
-美国头部公司一周表现：
-{stock_text}
+板块异常：
+{sector_movers}
+
+头部公司异常：
+{stock_movers}
 """
 
     try:
         response = client.chat.completions.create(
             model="grok-4.3",
             messages=[
-                {"role": "system", "content": "你是专业但克制的投资市场分析师，表达清晰，不夸张，不给具体买卖建议。"},
-                {"role": "user", "content": prompt},
+                {
+                    "role": "system",
+                    "content": "你是专业但克制的市场分析师，语言简洁，不夸张。"
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                },
             ],
-            temperature=0.4,
+            temperature=0.3,
+            max_tokens=500,
         )
+
+        print("AI usage:", response.usage)
 
         return response.choices[0].message.content.strip()
 
@@ -151,6 +175,20 @@ markets = {
     "🇮🇳 India Nifty 50": "^NSEI",
 }
 
+sectors = {
+    "Technology / 科技": "XLK",
+    "Financials / 金融": "XLF",
+    "Health Care / 医疗": "XLV",
+    "Energy / 能源": "XLE",
+    "Consumer Discretionary / 可选消费": "XLY",
+    "Consumer Staples / 必需消费": "XLP",
+    "Industrials / 工业": "XLI",
+    "Communication Services / 通讯服务": "XLC",
+    "Utilities / 公用事业": "XLU",
+    "Real Estate / 房地产": "XLRE",
+    "Materials / 材料": "XLB",
+}
+
 stocks = {
     "Apple": "AAPL",
     "Microsoft": "MSFT",
@@ -165,12 +203,21 @@ stocks = {
 }
 
 market_perf = {name: get_weekly_return(ticker) for name, ticker in markets.items()}
+sector_perf = {name: get_weekly_return(ticker) for name, ticker in sectors.items()}
 stock_perf = {name: get_weekly_return(ticker) for name, ticker in stocks.items()}
 
 market_text = format_perf_text(market_perf)
+sector_text = format_perf_text(sector_perf)
 stock_text = format_perf_text(stock_perf)
 
-ai_summary = generate_ai_summary(market_text, stock_text)
+sector_movers = get_movers(sector_perf, top_n=2)
+stock_movers = get_movers(stock_perf, top_n=2)
+
+ai_summary = generate_ai_summary(
+    market_brief=market_text,
+    sector_movers=sector_movers,
+    stock_movers=stock_movers,
+)
 
 today = datetime.date.today()
 
@@ -178,14 +225,17 @@ plain_body = f"""
 投资市场周报
 日期：{today}
 
-一、美国与全球主要市场表现
+一、AI 市场解读
+{ai_summary}
+
+二、美国与全球主要市场表现
 {market_text}
 
-二、美国头部公司表现
-{stock_text}
+三、美国主要板块表现
+{sector_text}
 
-三、AI 市场解读
-{ai_summary}
+四、美国头部公司表现
+{stock_text}
 
 免责声明：
 本邮件为自动生成的市场信息整理，不构成投资建议。
@@ -209,7 +259,20 @@ html_body = f"""
             </div>
         </div>
 
+        <div style="background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;padding:18px 18px;margin-bottom:22px;">
+            <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:#111111;">⚠️ 本周异常波动</div>
+            <div style="font-size:14px;line-height:1.8;color:#333333;white-space:pre-line;">
+板块：
+{escape(sector_movers)}
+
+头部公司：
+{escape(stock_movers)}
+            </div>
+        </div>
+
         {build_table("📊 美国与全球主要市场表现", market_perf)}
+
+        {build_table("🏭 美国主要板块表现", sector_perf)}
 
         {build_table("🏢 美国头部公司表现", stock_perf)}
 
@@ -234,4 +297,4 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.login(EMAIL_USER, EMAIL_PASS)
     server.sendmail(EMAIL_USER, EMAIL_TO, msg.as_string())
 
-print("Weekly market report with AI summary sent successfully.")
+print("Weekly market report with sector movers sent successfully.")
