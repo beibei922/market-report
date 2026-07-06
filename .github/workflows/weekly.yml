@@ -19,11 +19,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install yfinance pandas
+        run: pip install yfinance pandas openai
 
       - name: Run market report
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: python market_report.py
