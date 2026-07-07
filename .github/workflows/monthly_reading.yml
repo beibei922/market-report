@@ -1,0 +1,31 @@
+name: Monthly Reading Report
+
+on:
+  schedule:
+    - cron: "0 23 1 * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install openai
+
+      - name: Run reading report
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          READING_EMAIL_TO: ${{ secrets.READING_EMAIL_TO }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: python reading_report.py
