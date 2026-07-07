@@ -13,7 +13,9 @@ EMAIL_PASS = os.environ["EMAIL_PASS"]
 EMAIL_TO = os.environ.get("READING_EMAIL_TO", os.environ["EMAIL_TO"])
 XAI_API_KEY = os.environ["XAI_API_KEY"]
 
-BOOK_FILE = "books_to_review.txt"
+BOOK_REVIEW_FILE = "books_to_review.txt"
+BOOK_POOL_FILE = "book_pool.txt"
+READING_HISTORY_FILE = "reading_history.txt"
 
 client = OpenAI(
     api_key=XAI_API_KEY,
