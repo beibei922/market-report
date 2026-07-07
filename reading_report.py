@@ -1,6 +1,7 @@
 import os
 import datetime
 import smtplib
+import hashlib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
@@ -23,15 +24,19 @@ client = OpenAI(
 )
 
 
-def read_books():
-    if not os.path.exists(BOOK_FILE):
-        print(f"{BOOK_FILE} not found. No report will be sent.")
+def normalize_book_name(book):
+    return " ".join(book.lower().replace("—", "-").split())
+
+
+def read_lines_from_file(file_path):
+    if not os.path.exists(file_path):
+        print(f"{file_path} not found.")
         return []
 
-    with open(BOOK_FILE, "r", encoding="utf-8") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
-    books = []
+    clean_lines = []
     for line in lines:
         line = line.strip()
 
@@ -41,16 +46,91 @@ def read_books():
         if line.startswith("#"):
             continue
 
-        books.append(line)
+        clean_lines.append(line)
 
-    return books
+    return clean_lines
+
+
+def read_books_to_review():
+    return read_lines_from_file(BOOK_REVIEW_FILE)
+
+
+def read_book_pool():
+    return read_lines_from_file(BOOK_POOL_FILE)
+
+
+def read_history_books():
+    lines = read_lines_from_file(READING_HISTORY_FILE)
+    history_books = set()
+
+    for line in lines:
+        parts = [p.strip() for p in line.split("|")]
+
+        if len(parts) >= 3:
+            book = parts[-1]
+        else:
+            book = line
+
+        history_books.add(normalize_book_name(book))
+
+    return history_books
+
+
+def remove_duplicates(books):
+    seen = set()
+    result = []
+
+    for book in books:
+        key = normalize_book_name(book)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        result.append(book)
+
+    return result
+
+
+def filter_history_books(book_pool, history_books):
+    result = []
+
+    for book in book_pool:
+        key = normalize_book_name(book)
+
+        if key in history_books:
+            continue
+
+        result.append(book)
+
+    return result
+
+
+def select_monthly_candidates(available_books, max_candidates=70):
+    """
+    为了节省 tokens，不把整个 book_pool 都发给模型。
+    每个月从候选池里轮换选一批书，让模型在这批里面推荐。
+    """
+
+    if len(available_books) <= max_candidates:
+        return available_books
+
+    today = datetime.date.today()
+    month_key = today.year * 12 + today.month
+
+    # 用月份做一个稳定的轮换起点
+    start_index = month_key % len(available_books)
+
+    rotated = available_books[start_index:] + available_books[:start_index]
+
+    return rotated[:max_candidates]
 
 
 def build_books_text(books):
     return "\n".join([f"{i + 1}. {book}" for i, book in enumerate(books)])
 
 
-def generate_reading_report(books_text):
+def generate_manual_review_report(books_text):
     prompt = f"""
 你是我的私人阅读顾问。你的任务不是替我读书，而是帮我筛选哪些书值得精读、哪些适合泛读、哪些只需要看精华版、哪些暂时跳过。
 
@@ -94,6 +174,56 @@ def generate_reading_report(books_text):
 8. 总长度控制在 1200 到 1800 中文字。
 """
 
+    return call_grok(prompt, max_tokens=2200)
+
+
+def generate_auto_recommendation_report(candidate_books_text):
+    prompt = f"""
+你是我的私人阅读顾问。你的任务不是替我读书，而是帮我从候选书库中挑选本月最值得关注的书。
+
+我的阅读偏好：
+- 我喜欢 Nassim Nicholas Taleb 的《黑天鹅》《反脆弱》《随机漫步的傻瓜》。
+- 我喜欢 Howard Marks 的《投资最重要的事》和《周期》。
+- 我喜欢 MJ DeMarco 的 The Millionaire Fastlane。
+- 我喜欢 Robert P. Murphy 的 Lessons for the Young Economist。
+- 我喜欢 Malcolm Gladwell 的 Outliers 和 The Tipping Point。
+- 我喜欢 Yuval Noah Harari 和 Kevin Kelly 的书。
+- 我也喜欢有情感深度和人性复杂度的文学作品，比如 The Kite Runner。
+
+我的核心兴趣：
+不确定性、风险、反脆弱、周期、长期投资、财富系统、经济学、技术趋势、社会机制、宏大历史叙事、人性和命运。
+
+请从下面这批候选书中，给我生成一份“本月阅读推荐报告”。
+
+候选书：
+{candidate_books_text}
+
+报告要求：
+1. 推荐总数控制在 6 到 8 本。
+2. 必须分成四类：
+   A：最值得精读，推荐 2 本
+   B：值得泛读，推荐 2 到 3 本
+   C：看精华版即可，推荐 1 到 2 本
+   D：暂时不建议投入太多时间，列出 1 到 2 本
+3. 每本书说明：
+   - 推荐等级
+   - 一句话判断
+   - 为什么适合或不适合我
+   - 建议阅读方式
+   - 是否可能有中文版；如果不确定，请说“需要进一步确认中文版情况”
+4. 最后单独给出：
+   - 如果本月只能读一本，我建议读哪本
+   - 本月阅读顺序
+   - 哪本适合以后再读
+5. 风格克制，不要把每本书都说成必读。
+6. 不要编造不存在的信息。
+7. 总长度控制在 1000 到 1500 中文字。
+"""
+
+    return call_grok(prompt, max_tokens=1900)
+
+
+def call_grok(prompt, max_tokens):
     try:
         response = client.chat.completions.create(
             model="grok-4.3",
@@ -108,7 +238,7 @@ def generate_reading_report(books_text):
                 },
             ],
             temperature=0.35,
-            max_tokens=2200,
+            max_tokens=max_tokens,
         )
 
         print("AI usage:", response.usage)
@@ -120,9 +250,9 @@ def generate_reading_report(books_text):
         return None
 
 
-def build_html_report(report_text, books):
+def build_html_report(report_text, displayed_books, report_mode, extra_note):
     books_html = ""
-    for book in books:
+    for book in displayed_books:
         books_html += f"""
         <li style="margin-bottom:8px;line-height:1.6;">{escape(book)}</li>
         """
@@ -139,7 +269,16 @@ def build_html_report(report_text, books):
         </div>
 
         <div style="background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;padding:18px 18px;margin-bottom:22px;">
-            <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:#111111;">📚 本期候选书单</div>
+            <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:#111111;">📌 报告模式</div>
+            <div style="font-size:14px;line-height:1.8;color:#333333;">
+                {escape(report_mode)}
+                <br>
+                {escape(extra_note)}
+            </div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;padding:18px 18px;margin-bottom:22px;">
+            <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:#111111;">📚 本期参考书单</div>
             <ol style="padding-left:22px;margin:0;font-size:14px;color:#333333;">
                 {books_html}
             </ol>
@@ -161,15 +300,21 @@ def build_html_report(report_text, books):
 """
 
 
-def send_email(report_text, books):
+def send_email(report_text, displayed_books, report_mode, extra_note):
     today = datetime.date.today()
 
     plain_body = f"""
 个人阅读筛选报告
 日期：{today}
 
-本期候选书单：
-{build_books_text(books)}
+报告模式：
+{report_mode}
+
+说明：
+{extra_note}
+
+本期参考书单：
+{build_books_text(displayed_books)}
 
 阅读筛选建议：
 {report_text}
@@ -178,7 +323,7 @@ def send_email(report_text, books):
 本邮件为自动生成的阅读筛选报告。它的目的不是替代阅读，而是帮助你决定哪些书值得精读、泛读、看精华或暂时跳过。
 """
 
-    html_body = build_html_report(report_text, books)
+    html_body = build_html_report(report_text, displayed_books, report_mode, extra_note)
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"个人阅读筛选报告 - {today}"
@@ -197,20 +342,56 @@ def send_email(report_text, books):
 
 
 def main():
-    books = read_books()
+    manual_books = read_books_to_review()
 
-    if not books:
-        print("No books found in books_to_review.txt. No AI call and no email sent.")
+    if manual_books:
+        manual_books = remove_duplicates(manual_books)
+        books_text = build_books_text(manual_books)
+
+        report_text = generate_manual_review_report(books_text)
+
+        if report_text is None:
+            print("No report generated. Email will not be sent.")
+            return
+
+        send_email(
+            report_text=report_text,
+            displayed_books=manual_books,
+            report_mode="手动候选书单评估模式",
+            extra_note="系统检测到 books_to_review.txt 中有候选书，因此优先评估你手动添加的书单。"
+        )
+
         return
 
-    books_text = build_books_text(books)
-    report_text = generate_reading_report(books_text)
+    book_pool = read_book_pool()
+
+    if not book_pool:
+        print("No manual books and no book_pool.txt content. No AI call and no email sent.")
+        return
+
+    book_pool = remove_duplicates(book_pool)
+    history_books = read_history_books()
+    available_books = filter_history_books(book_pool, history_books)
+
+    if not available_books:
+        print("All books in book_pool.txt appear to be in reading_history.txt. No email sent.")
+        return
+
+    monthly_candidates = select_monthly_candidates(available_books, max_candidates=70)
+    candidate_books_text = build_books_text(monthly_candidates)
+
+    report_text = generate_auto_recommendation_report(candidate_books_text)
 
     if report_text is None:
         print("No report generated. Email will not be sent.")
         return
 
-    send_email(report_text, books)
+    send_email(
+        report_text=report_text,
+        displayed_books=monthly_candidates,
+        report_mode="自动候选书库推荐模式",
+        extra_note="系统检测到 books_to_review.txt 为空，因此从 book_pool.txt 中筛选候选书，并排除了 reading_history.txt 中已记录的书。"
+    )
 
 
 if __name__ == "__main__":
