@@ -1,0 +1,15 @@
+# 格式示例：
+# 2026-07-07 | read | The Black Swan - Nassim Nicholas Taleb
+# 2026-07-07 | recommended | The Beginning of Infinity - David Deutsch
+# 2026-07-07 | skip | 某本你不感兴趣的书
+
+2026-07-07 | read | The Black Swan - Nassim Nicholas Taleb
+2026-07-07 | read | Antifragile - Nassim Nicholas Taleb
+2026-07-07 | read | Fooled by Randomness - Nassim Nicholas Taleb
+2026-07-07 | read | The Most Important Thing - Howard Marks
+2026-07-07 | read | Mastering the Market Cycle - Howard Marks
+2026-07-07 | read | The Millionaire Fastlane - MJ DeMarco
+2026-07-07 | read | Lessons for the Young Economist - Robert P. Murphy
+2026-07-07 | read | The Kite Runner - Khaled Hosseini
+2026-07-07 | read | Outliers - Malcolm Gladwell
+2026-07-07 | read | The Tipping Point - Malcolm Gladwell
