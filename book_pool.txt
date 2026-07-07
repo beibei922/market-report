@@ -1,0 +1,301 @@
+# 不确定性 / 风险 / 复杂系统
+The Bed of Procrustes - Nassim Nicholas Taleb
+Skin in the Game - Nassim Nicholas Taleb
+Statistical Consequences of Fat Tails - Nassim Nicholas Taleb
+Against the Gods - Peter L. Bernstein
+The Misbehavior of Markets - Benoit Mandelbrot and Richard L. Hudson
+Thinking in Bets - Annie Duke
+The Signal and the Noise - Nate Silver
+Superforecasting - Philip E. Tetlock and Dan Gardner
+Risk Savvy - Gerd Gigerenzer
+Calculated Risks - Gerd Gigerenzer
+Risk: A User's Guide - Stanley McChrystal and Anna Butrico
+The Logic of Failure - Dietrich Dörner
+Normal Accidents - Charles Perrow
+Meltdown - Chris Clearfield and András Tilcsik
+The Fifth Discipline - Peter M. Senge
+Thinking in Systems - Donella H. Meadows
+Complexity - M. Mitchell Waldrop
+Scale - Geoffrey West
+Sync - Steven Strogatz
+Linked - Albert-László Barabási
+Ubiquity - Mark Buchanan
+The Origin of Wealth - Eric D. Beinhocker
+The Nature of Technology - W. Brian Arthur
+The Sciences of the Artificial - Herbert A. Simon
+Finite and Infinite Games - James P. Carse
+Fooled by Randomness - Nassim Nicholas Taleb
+The Black Swan - Nassim Nicholas Taleb
+Antifragile - Nassim Nicholas Taleb
+
+# 投资 / 周期 / 资本市场 / 行为金融
+The Most Important Thing - Howard Marks
+Mastering the Market Cycle - Howard Marks
+The Psychology of Money - Morgan Housel
+Same as Ever - Morgan Housel
+Expectations Investing - Michael J. Mauboussin and Alfred Rappaport
+More Than You Know - Michael J. Mauboussin
+The Success Equation - Michael J. Mauboussin
+Capital Returns - Edward Chancellor
+The Price of Time - Edward Chancellor
+Devil Take the Hindmost - Edward Chancellor
+The Great Depression: A Diary - Benjamin Roth
+Manias, Panics, and Crashes - Charles P. Kindleberger and Robert Z. Aliber
+A Short History of Financial Euphoria - John Kenneth Galbraith
+Irrational Exuberance - Robert J. Shiller
+Narrative Economics - Robert J. Shiller
+Animal Spirits - George A. Akerlof and Robert J. Shiller
+Stocks for the Long Run - Jeremy J. Siegel
+A Random Walk Down Wall Street - Burton G. Malkiel
+The Intelligent Investor - Benjamin Graham
+Security Analysis - Benjamin Graham and David Dodd
+Common Stocks and Uncommon Profits - Philip A. Fisher
+One Up On Wall Street - Peter Lynch
+Beating the Street - Peter Lynch
+The Essays of Warren Buffett - Lawrence A. Cunningham
+Poor Charlie's Almanack - Charlie Munger
+Margin of Safety - Seth Klarman
+The Warren Buffett Way - Robert G. Hagstrom
+Big Mistakes - Michael Batnick
+What I Learned About Investing from Darwin - Pulak Prasad
+Investing: The Last Liberal Art - Robert G. Hagstrom
+The Dao of Capital - Mark Spitznagel
+Triumph of the Optimists - Elroy Dimson, Paul Marsh, and Mike Staunton
+Capital in the Twenty-First Century - Thomas Piketty
+
+# 经济学 / 制度 / 激励 / 市场
+Lessons for the Young Economist - Robert P. Murphy
+Economics in One Lesson - Henry Hazlitt
+Basic Economics - Thomas Sowell
+Knowledge and Decisions - Thomas Sowell
+The Vision of the Anointed - Thomas Sowell
+The Road to Serfdom - F. A. Hayek
+The Use of Knowledge in Society - F. A. Hayek
+Law, Legislation and Liberty - F. A. Hayek
+Human Action - Ludwig von Mises
+The Theory of Money and Credit - Ludwig von Mises
+Man, Economy, and State - Murray N. Rothbard
+Choice - Robert P. Murphy
+The Mystery of Capital - Hernando de Soto
+Why Nations Fail - Daron Acemoglu and James A. Robinson
+The Narrow Corridor - Daron Acemoglu and James A. Robinson
+The Rise and Decline of Nations - Mancur Olson
+The Logic of Collective Action - Mancur Olson
+Governing the Commons - Elinor Ostrom
+The Great Escape - Angus Deaton
+The Undercover Economist - Tim Harford
+Adapt - Tim Harford
+The Worldly Philosophers - Robert L. Heilbroner
+Debt: The First 5,000 Years - David Graeber
+The Ascent of Money - Niall Ferguson
+The Cash Nexus - Niall Ferguson
+The Great Transformation - Karl Polanyi
+Capitalism, Socialism and Democracy - Joseph A. Schumpeter
+
+# 财富系统 / 创业 / 杠杆 / 商业模式
+The Millionaire Fastlane - MJ DeMarco
+Unscripted - MJ DeMarco
+The Almanack of Naval Ravikant - Eric Jorgenson
+Zero to One - Peter Thiel and Blake Masters
+The Lean Startup - Eric Ries
+The Hard Thing About Hard Things - Ben Horowitz
+High Output Management - Andrew S. Grove
+Only the Paranoid Survive - Andrew S. Grove
+The Innovator's Dilemma - Clayton M. Christensen
+The Innovator's Solution - Clayton M. Christensen and Michael E. Raynor
+Competing Against Luck - Clayton M. Christensen
+Crossing the Chasm - Geoffrey A. Moore
+Good Strategy Bad Strategy - Richard Rumelt
+The Crux - Richard Rumelt
+Blue Ocean Strategy - W. Chan Kim and Renée Mauborgne
+The Outsiders - William N. Thorndike
+The Everything Store - Brad Stone
+Amazon Unbound - Brad Stone
+The Snowball - Alice Schroeder
+Steve Jobs - Walter Isaacson
+Elon Musk - Walter Isaacson
+Shoe Dog - Phil Knight
+Creativity, Inc. - Ed Catmull
+The 7 Powers - Hamilton Helmer
+The Great CEO Within - Matt Mochary
+The Personal MBA - Josh Kaufman
+Built to Sell - John Warrillow
+Company of One - Paul Jarvis
+The E-Myth Revisited - Michael E. Gerber
+The Mom Test - Rob Fitzpatrick
+Obviously Awesome - April Dunford
+Positioning - Al Ries and Jack Trout
+The 22 Immutable Laws of Marketing - Al Ries and Jack Trout
+Contagious - Jonah Berger
+Made to Stick - Chip Heath and Dan Heath
+Influence - Robert B. Cialdini
+Pre-Suasion - Robert B. Cialdini
+
+# 科技趋势 / 未来 / AI / 网络社会
+What Technology Wants - Kevin Kelly
+The Inevitable - Kevin Kelly
+Out of Control - Kevin Kelly
+Excellent Advice for Living - Kevin Kelly
+The Beginning of Infinity - David Deutsch
+The Fabric of Reality - David Deutsch
+The Singularity Is Near - Ray Kurzweil
+The Singularity Is Nearer - Ray Kurzweil
+Life 3.0 - Max Tegmark
+Human Compatible - Stuart Russell
+The Alignment Problem - Brian Christian
+The Most Human Human - Brian Christian
+The Master Algorithm - Pedro Domingos
+The Coming Wave - Mustafa Suleyman
+The Age of AI - Henry Kissinger, Eric Schmidt, and Daniel Huttenlocher
+The Second Machine Age - Erik Brynjolfsson and Andrew McAfee
+Machine, Platform, Crowd - Andrew McAfee and Erik Brynjolfsson
+The Innovators - Walter Isaacson
+Where Wizards Stay Up Late - Katie Hafner and Matthew Lyon
+Hackers - Steven Levy
+Dealers of Lightning - Michael A. Hiltzik
+What the Dormouse Said - John Markoff
+The Dream Machine - M. Mitchell Waldrop
+The Code Book - Simon Singh
+Code - Charles Petzold
+The Information - James Gleick
+Chaos - James Gleick
+Gödel, Escher, Bach - Douglas R. Hofstadter
+Metamagical Themas - Douglas R. Hofstadter
+How Buildings Learn - Stewart Brand
+Whole Earth Discipline - Stewart Brand
+Tools for Conviviality - Ivan Illich
+
+# 社会机制 / 成功 / 传播 / 心理学
+Outliers - Malcolm Gladwell
+The Tipping Point - Malcolm Gladwell
+Blink - Malcolm Gladwell
+David and Goliath - Malcolm Gladwell
+Talking to Strangers - Malcolm Gladwell
+Thinking, Fast and Slow - Daniel Kahneman
+Noise - Daniel Kahneman, Olivier Sibony, and Cass R. Sunstein
+Predictably Irrational - Dan Ariely
+Nudge - Richard H. Thaler and Cass R. Sunstein
+Misbehaving - Richard H. Thaler
+The Righteous Mind - Jonathan Haidt
+The Happiness Hypothesis - Jonathan Haidt
+The Coddling of the American Mind - Greg Lukianoff and Jonathan Haidt
+The Social Animal - Elliot Aronson
+Mistakes Were Made - Carol Tavris and Elliot Aronson
+The Elephant in the Brain - Kevin Simler and Robin Hanson
+The WEIRDest People in the World - Joseph Henrich
+The Secret of Our Success - Joseph Henrich
+Cultural Evolution - Ronald Inglehart
+Bowling Alone - Robert D. Putnam
+The Better Angels of Our Nature - Steven Pinker
+Enlightenment Now - Steven Pinker
+Factfulness - Hans Rosling
+The Demon-Haunted World - Carl Sagan
+Amusing Ourselves to Death - Neil Postman
+Technopoly - Neil Postman
+Understanding Media - Marshall McLuhan
+The Medium is the Massage - Marshall McLuhan
+Diffusion of Innovations - Everett M. Rogers
+
+# 历史 / 文明 / 宏大叙事
+Sapiens - Yuval Noah Harari
+Homo Deus - Yuval Noah Harari
+21 Lessons for the 21st Century - Yuval Noah Harari
+The Lessons of History - Will Durant and Ariel Durant
+The Story of Civilization - Will Durant and Ariel Durant
+Guns, Germs, and Steel - Jared Diamond
+Collapse - Jared Diamond
+The Silk Roads - Peter Frankopan
+The New Silk Roads - Peter Frankopan
+The Rise and Fall of the Great Powers - Paul Kennedy
+The Pursuit of Power - Richard J. Evans
+Postwar - Tony Judt
+The Age of Revolution - Eric Hobsbawm
+The Age of Capital - Eric Hobsbawm
+The Age of Empire - Eric Hobsbawm
+The Age of Extremes - Eric Hobsbawm
+A Distant Mirror - Barbara W. Tuchman
+The Guns of August - Barbara W. Tuchman
+The March of Folly - Barbara W. Tuchman
+SPQR - Mary Beard
+Rubicon - Tom Holland
+Persian Fire - Tom Holland
+The Histories - Herodotus
+The Peloponnesian War - Thucydides
+Meditations - Marcus Aurelius
+The Prince - Niccolò Machiavelli
+The Discourses - Niccolò Machiavelli
+The True Believer - Eric Hoffer
+The Sovereign Individual - James Dale Davidson and William Rees-Mogg
+
+# 阅读 / 学习 / 写作 / 思考方法
+How to Read a Book - Mortimer J. Adler and Charles Van Doren
+The Great Mental Models - Shane Parrish
+Poor Charlie's Almanack - Charlie Munger
+Seeking Wisdom - Peter Bevelin
+A Guide to the Good Life - William B. Irvine
+The Art of Thinking Clearly - Rolf Dobelli
+The Scout Mindset - Julia Galef
+Range - David Epstein
+So Good They Can't Ignore You - Cal Newport
+Deep Work - Cal Newport
+Digital Minimalism - Cal Newport
+How to Take Smart Notes - Sönke Ahrens
+The Craft of Research - Wayne C. Booth, Gregory G. Colomb, and Joseph M. Williams
+On Writing Well - William Zinsser
+Bird by Bird - Anne Lamott
+Several Short Sentences About Writing - Verlyn Klinkenborg
+The Sense of Style - Steven Pinker
+Draft No. 4 - John McPhee
+The War of Art - Steven Pressfield
+Show Your Work - Austin Kleon
+Steal Like an Artist - Austin Kleon
+The Creative Act - Rick Rubin
+
+# 文学 / 人性 / 命运 / 历史处境
+The Kite Runner - Khaled Hosseini
+A Thousand Splendid Suns - Khaled Hosseini
+And the Mountains Echoed - Khaled Hosseini
+To Kill a Mockingbird - Harper Lee
+The Grapes of Wrath - John Steinbeck
+East of Eden - John Steinbeck
+Of Mice and Men - John Steinbeck
+One Hundred Years of Solitude - Gabriel García Márquez
+Love in the Time of Cholera - Gabriel García Márquez
+The Brothers Karamazov - Fyodor Dostoevsky
+Crime and Punishment - Fyodor Dostoevsky
+Notes from Underground - Fyodor Dostoevsky
+Anna Karenina - Leo Tolstoy
+War and Peace - Leo Tolstoy
+The Death of Ivan Ilyich - Leo Tolstoy
+Les Misérables - Victor Hugo
+The Count of Monte Cristo - Alexandre Dumas
+The Stranger - Albert Camus
+The Plague - Albert Camus
+Man's Search for Meaning - Viktor E. Frankl
+Night - Elie Wiesel
+The Remains of the Day - Kazuo Ishiguro
+Never Let Me Go - Kazuo Ishiguro
+Klara and the Sun - Kazuo Ishiguro
+1984 - George Orwell
+Animal Farm - George Orwell
+Brave New World - Aldous Huxley
+Fahrenheit 451 - Ray Bradbury
+Flowers for Algernon - Daniel Keyes
+The Old Man and the Sea - Ernest Hemingway
+The Road - Cormac McCarthy
+Blood Meridian - Cormac McCarthy
+Stoner - John Williams
+A Gentleman in Moscow - Amor Towles
+The Book Thief - Markus Zusak
+All the Light We Cannot See - Anthony Doerr
+
+# 中国 / 东亚 / 现代社会理解
+The Search for Modern China - Jonathan D. Spence
+China's Economy - Arthur R. Kroeber
+The Party - Richard McGregor
+China in Ten Words - Yu Hua
+To Live - Yu Hua
+Brothers - Yu Hua
+The Three-Body Problem - Liu Cixin
+The Dark Forest - Liu Cixin
+Death's End - Liu Cixin
