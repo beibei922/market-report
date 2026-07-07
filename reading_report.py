@@ -10,7 +10,7 @@ from openai import OpenAI
 
 EMAIL_USER = os.environ["EMAIL_USER"]
 EMAIL_PASS = os.environ["EMAIL_PASS"]
-EMAIL_TO = os.environ["EMAIL_TO"]
+EMAIL_TO = os.environ.get("READING_EMAIL_TO", os.environ["EMAIL_TO"])
 XAI_API_KEY = os.environ["XAI_API_KEY"]
 
 BOOK_FILE = "books_to_review.txt"
