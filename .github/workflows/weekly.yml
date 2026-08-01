@@ -2,7 +2,7 @@ name: Weekly Market Report
 
 on:
   schedule:
-    - cron: "0 22 * * 5"
+    - cron: "17 22 * * 5"
   workflow_dispatch:
 
 jobs:
