@@ -398,6 +398,90 @@ def get_rate_metrics(ticker="^TNX"):
         }
 
 
+
+
+def get_valuation_metrics(ticker, neutral_forward_pe):
+    """
+    获取 ETF 的估值数据。优先使用 Yahoo Finance 的 Forward P/E，
+    若不可用则退回 Trailing P/E。
+
+    neutral_forward_pe 是本周报用于比较的简化中性锚点，
+    不是官方公允价值，也不是买卖阈值。
+    """
+    try:
+        info = yf.Ticker(ticker).info or {}
+
+        forward_pe = info.get("forwardPE")
+        trailing_pe = info.get("trailingPE")
+
+        pe = forward_pe if forward_pe not in (None, 0) else trailing_pe
+        pe_type = "Forward P/E" if forward_pe not in (None, 0) else "Trailing P/E"
+
+        if pe in (None, 0):
+            return {
+                "pe": None,
+                "pe_type": "数据不足",
+                "neutral_pe": neutral_forward_pe,
+                "ratio_to_neutral": None,
+                "state": "数据不足",
+            }
+
+        pe = float(pe)
+        ratio = pe / neutral_forward_pe
+
+        if ratio >= 1.30:
+            state = "明显偏贵"
+        elif ratio >= 1.15:
+            state = "偏贵"
+        elif ratio >= 1.00:
+            state = "略偏贵"
+        elif ratio >= 0.90:
+            state = "中性"
+        elif ratio >= 0.80:
+            state = "偏便宜"
+        else:
+            state = "明显偏便宜"
+
+        return {
+            "pe": round(pe, 2),
+            "pe_type": pe_type,
+            "neutral_pe": neutral_forward_pe,
+            "ratio_to_neutral": round(ratio, 3),
+            "state": state,
+        }
+
+    except Exception as e:
+        print(f"Failed to fetch valuation metrics for {ticker}: {e}")
+        return {
+            "pe": None,
+            "pe_type": "数据不足",
+            "neutral_pe": neutral_forward_pe,
+            "ratio_to_neutral": None,
+            "state": "数据不足",
+        }
+
+
+def score_valuation_metric(valuation):
+    """
+    估值越便宜，机会分越高。单个指数满分 25。
+    这里比较的是当前 P/E 与简化中性锚点的比例。
+    """
+    ratio = valuation.get("ratio_to_neutral")
+    if ratio is None:
+        return None
+    if ratio >= 1.30:
+        return 2
+    if ratio >= 1.15:
+        return 5
+    if ratio >= 1.00:
+        return 9
+    if ratio >= 0.90:
+        return 14
+    if ratio >= 0.80:
+        return 19
+    return 25
+
+
 def score_trend_distance(distance_pct):
     """趋势越弱，机会温度分越高。满分 35。"""
     if distance_pct is None:
@@ -438,34 +522,47 @@ def score_rate_environment(rate):
     return 12
 
 
-def build_market_dashboard(vix, vxn, risk, spy_trend, qqq_trend, rate):
+def build_market_dashboard(vix, vxn, risk, spy_trend, qqq_trend, rate, spy_valuation, qqq_valuation):
     """
-    V1 市场机会温度：
-    - VIX/VXN 情绪压力 40%
-    - SPY/QQQ 200 日趋势 35%
-    - 10 年美债收益率环境 25%
+    V2 市场机会温度：
+    - VIX/VXN 情绪压力 30%
+    - SPY/QQQ 200 日趋势 25%
+    - 估值温度 25%
+    - 10 年美债收益率环境 20%
 
-    分数越高 = 市场越偏冷/压力越大，并不等于确定的买入信号。
+    分数越高 = 市场越偏冷/压力越大/估值越有吸引力，
+    并不等于确定的买入信号。
     """
     components = []
 
     volatility_points = None
     if risk.get("score") is not None:
-        volatility_points = round(risk["score"] / 100 * 40, 1)
-        components.append((volatility_points, 40))
+        volatility_points = round(risk["score"] / 100 * 30, 1)
+        components.append((volatility_points, 30))
 
-    trend_raw = [
+    trend_scores = [
         score_trend_distance(spy_trend.get("distance_pct")),
         score_trend_distance(qqq_trend.get("distance_pct")),
     ]
-    trend_raw = [x for x in trend_raw if x is not None]
-    trend_points = round(sum(trend_raw) / len(trend_raw), 1) if trend_raw else None
+    trend_scores = [x for x in trend_scores if x is not None]
+    # 原函数的单项满分是35，这里缩放到V2的25分。
+    trend_points = round((sum(trend_scores) / len(trend_scores)) / 35 * 25, 1) if trend_scores else None
     if trend_points is not None:
-        components.append((trend_points, 35))
+        components.append((trend_points, 25))
 
-    rate_points = score_rate_environment(rate)
+    valuation_scores = [
+        score_valuation_metric(spy_valuation),
+        score_valuation_metric(qqq_valuation),
+    ]
+    valuation_scores = [x for x in valuation_scores if x is not None]
+    valuation_points = round(sum(valuation_scores) / len(valuation_scores), 1) if valuation_scores else None
+    if valuation_points is not None:
+        components.append((valuation_points, 25))
+
+    old_rate_points = score_rate_environment(rate)
+    rate_points = round(old_rate_points / 25 * 20, 1) if old_rate_points is not None else None
     if rate_points is not None:
-        components.append((rate_points, 25))
+        components.append((rate_points, 20))
 
     if not components:
         score = None
@@ -502,15 +599,17 @@ def build_market_dashboard(vix, vxn, risk, spy_trend, qqq_trend, rate):
         "guidance": guidance,
         "volatility_points": volatility_points,
         "trend_points": trend_points,
+        "valuation_points": valuation_points,
         "rate_points": rate_points,
     }
 
-
-def build_dashboard_text(spy_trend, qqq_trend, rate, dashboard):
+def build_dashboard_text(spy_trend, qqq_trend, rate, spy_valuation, qqq_valuation, dashboard):
     score_text = "数据不足" if dashboard["score"] is None else f"{dashboard['score']}/100"
     return "\n".join([
         f"- Market Opportunity Score：{score_text}",
         f"- 综合状态：{dashboard['emoji']} {dashboard['state']}",
+        f"- SPY 估值：{metric_label(spy_valuation['pe'])}（{spy_valuation['pe_type']}，{spy_valuation['state']}）",
+        f"- QQQ 估值：{metric_label(qqq_valuation['pe'])}（{qqq_valuation['pe_type']}，{qqq_valuation['state']}）",
         f"- SPY vs 200日均线：{metric_label(spy_trend['distance_pct'], '%')}（{spy_trend['state']}）",
         f"- QQQ vs 200日均线：{metric_label(qqq_trend['distance_pct'], '%')}（{qqq_trend['state']}）",
         f"- SPY 200日均线近20日变化：{metric_label(spy_trend['ma200_slope_20d'], '%')}",
@@ -521,8 +620,7 @@ def build_dashboard_text(spy_trend, qqq_trend, rate, dashboard):
         f"- 长期投资者参考：{dashboard['guidance']}",
     ])
 
-
-def build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard):
+def build_market_dashboard_card(spy_trend, qqq_trend, rate, spy_valuation, qqq_valuation, dashboard):
     def row(label, value):
         return f"""
         <tr>
@@ -536,6 +634,8 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard):
     score_text = "数据不足" if dashboard["score"] is None else f"{dashboard['score']}/100"
 
     rows = ""
+    rows += row("SPY 估值", f"{metric_label(spy_valuation['pe'])} · {spy_valuation['pe_type']} · {spy_valuation['state']}")
+    rows += row("QQQ 估值", f"{metric_label(qqq_valuation['pe'])} · {qqq_valuation['pe_type']} · {qqq_valuation['state']}")
     rows += row("SPY vs 200日均线", f"{metric_label(spy_trend['distance_pct'], '%')} · {spy_trend['state']}")
     rows += row("QQQ vs 200日均线", f"{metric_label(qqq_trend['distance_pct'], '%')} · {qqq_trend['state']}")
     rows += row("SPY 200日线近20日", metric_label(spy_trend["ma200_slope_20d"], "%"))
@@ -547,7 +647,7 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard):
     return f"""
     <div style="margin:22px 0;background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;overflow:hidden;">
         <div style="padding:14px 16px;background:#f7f8fa;border-bottom:1px solid #e8e8e8;font-size:17px;font-weight:700;color:#111111;">
-            🧭 市场机会仪表盘 · V1
+            🧭 市场机会仪表盘 · V2
         </div>
 
         <div style="padding:16px 16px 8px 16px;">
@@ -558,7 +658,7 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard):
                 Market Opportunity Score：<strong>{escape(score_text)}</strong>
             </div>
             <div style="font-size:11px;color:#777777;line-height:1.6;">
-                V1 权重：VIX/VXN 40% · SPY/QQQ 200日趋势 35% · 10年美债收益率环境 25%
+                V2 权重：VIX/VXN 30% · 估值 25% · SPY/QQQ 200日趋势 25% · 10年美债收益率环境 20%
             </div>
         </div>
 
@@ -571,11 +671,10 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard):
         </div>
 
         <div style="padding:10px 16px 14px 16px;background:#fafafa;font-size:11px;line-height:1.6;color:#777777;">
-            注：该评分用于描述市场温度和压力，不预测短期涨跌，也不应单独作为清仓、满仓或短线择时依据。后续版本可再加入估值与市场宽度模块。
+            注：估值模块优先读取 Yahoo Finance Forward P/E，缺失时退回 Trailing P/E。SPY 20倍、QQQ 25倍仅作为本周报的简化中性估值锚点，不代表公允价值或买卖阈值。该评分不预测短期涨跌。
         </div>
     </div>
     """
-
 
 def generate_ai_summary(market_text, stock_text, risk_text, dashboard_text):
     prompt = f"""
@@ -587,15 +686,16 @@ def generate_ai_summary(market_text, stock_text, risk_text, dashboard_text):
 1. 不要给短线交易建议。
 2. 不要预测市场一定上涨或下跌。
 3. 重点解释市场情绪、风险偏好、科技股表现、美国与非美国市场相对强弱。
-4. 结合 VIX/VXN、SPY/QQQ 200日均线趋势和10年美债收益率环境，解释 Market Opportunity Score，而不是只看单一指标。
-5. 如果 VXN 明显高于 VIX，可以指出科技股隐含波动率相对更高，但不要把差值机械解释成未来涨跌方向。
-6. 可以给长期投资者“维持、正常定投、分批投入预留资金、检查再平衡”等参考。
-7. 不得仅凭 VIX/VXN 建议清仓、满仓、一次性重仓或进行短线择时。
-8. Market Opportunity Score 越高只代表市场越偏冷或压力越大，不等于确定买点；不得把评分解释为短期预测。
-9. 语言适合长期指数投资者阅读。
-10. 总长度控制在 450-650 中文字。
-11. 最后加一句“长期投资者本周可关注：……”。
-12. 不要使用 Markdown 表格。
+4. 结合 VIX/VXN、SPY/QQQ 估值、200日均线趋势和10年美债收益率环境，解释 Market Opportunity Score，而不是只看单一指标。
+5. 估值模块使用 ETF 的 Forward P/E（缺失时为 Trailing P/E）；解释估值时保持克制，不把一个 P/E 数字当成绝对买卖信号。
+6. 如果 VXN 明显高于 VIX，可以指出科技股隐含波动率相对更高，但不要把差值机械解释成未来涨跌方向。
+7. 可以给长期投资者“维持、正常定投、分批投入预留资金、检查再平衡”等参考。
+8. 不得仅凭 VIX/VXN 建议清仓、满仓、一次性重仓或进行短线择时。
+9. Market Opportunity Score 越高只代表市场越偏冷或压力越大，不等于确定买点；不得把评分解释为短期预测。
+10. 语言适合长期指数投资者阅读。
+11. 总长度控制在 450-650 中文字。
+12. 最后加一句“长期投资者本周可关注：……”。
+13. 不要使用 Markdown 表格。
 
 美国与全球主要市场一周表现：
 {market_text}
@@ -671,8 +771,18 @@ risk_text = build_risk_text(vix, vxn, risk)
 spy_trend = get_trend_metrics("SPY")
 qqq_trend = get_trend_metrics("QQQ")
 rate = get_rate_metrics("^TNX")
-dashboard = build_market_dashboard(vix, vxn, risk, spy_trend, qqq_trend, rate)
-dashboard_text = build_dashboard_text(spy_trend, qqq_trend, rate, dashboard)
+
+# V2 估值模块：优先使用 Forward P/E。
+# 20（SPY）与 25（QQQ）是本周报的简化中性锚点，仅用于温度比较。
+spy_valuation = get_valuation_metrics("SPY", neutral_forward_pe=20.0)
+qqq_valuation = get_valuation_metrics("QQQ", neutral_forward_pe=25.0)
+
+dashboard = build_market_dashboard(
+    vix, vxn, risk, spy_trend, qqq_trend, rate, spy_valuation, qqq_valuation
+)
+dashboard_text = build_dashboard_text(
+    spy_trend, qqq_trend, rate, spy_valuation, qqq_valuation, dashboard
+)
 
 ai_summary = generate_ai_summary(market_text, stock_text, risk_text, dashboard_text)
 
@@ -715,7 +825,7 @@ html_body = f"""
 
         {build_risk_card(vix, vxn, risk)}
 
-        {build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard)}
+        {build_market_dashboard_card(spy_trend, qqq_trend, rate, spy_valuation, qqq_valuation, dashboard)}
 
         <div style="background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;padding:18px 18px;margin-bottom:22px;">
             <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:#111111;">🧠 AI 市场解读</div>
@@ -749,4 +859,4 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.login(EMAIL_USER, EMAIL_PASS)
     server.sendmail(EMAIL_USER, EMAIL_TO, msg.as_string())
 
-print("Weekly market report with VIX/VXN + market opportunity dashboard sent successfully.")
+print("Weekly market report with VIX/VXN + valuation + market opportunity dashboard V2 sent successfully.")
