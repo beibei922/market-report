@@ -291,24 +291,311 @@ def build_risk_card(vix, vxn, risk):
     """
 
 
-def generate_ai_summary(market_text, stock_text, risk_text):
+
+def get_trend_metrics(ticker):
+    """返回价格相对 200 日均线的位置与 200 日均线方向。"""
+    try:
+        close = get_close_series(ticker, period="18mo")
+
+        if close is None or len(close) < 200:
+            return {
+                "price": None,
+                "ma200": None,
+                "distance_pct": None,
+                "ma200_slope_20d": None,
+                "state": "数据不足",
+            }
+
+        ma200 = close.rolling(200).mean().dropna()
+        if ma200.empty:
+            return {
+                "price": None,
+                "ma200": None,
+                "distance_pct": None,
+                "ma200_slope_20d": None,
+                "state": "数据不足",
+            }
+
+        current_price = float(close.iloc[-1])
+        current_ma200 = float(ma200.iloc[-1])
+        distance_pct = round((current_price / current_ma200 - 1) * 100, 2)
+
+        ma200_slope_20d = None
+        if len(ma200) >= 21:
+            old_ma200 = float(ma200.iloc[-21])
+            ma200_slope_20d = round((current_ma200 / old_ma200 - 1) * 100, 2)
+
+        if distance_pct > 5:
+            state = "强势"
+        elif distance_pct >= 0:
+            state = "偏强"
+        elif distance_pct >= -5:
+            state = "偏弱"
+        else:
+            state = "弱势"
+
+        return {
+            "price": round(current_price, 2),
+            "ma200": round(current_ma200, 2),
+            "distance_pct": distance_pct,
+            "ma200_slope_20d": ma200_slope_20d,
+            "state": state,
+        }
+
+    except Exception as e:
+        print(f"Failed to fetch trend metrics for {ticker}: {e}")
+        return {
+            "price": None,
+            "ma200": None,
+            "distance_pct": None,
+            "ma200_slope_20d": None,
+            "state": "数据不足",
+        }
+
+
+def get_rate_metrics(ticker="^TNX"):
+    """观察 10 年期美债收益率当前值、20 个交易日变化及其相对 50 日均线位置。"""
+    try:
+        close = get_close_series(ticker, period="1y")
+
+        if close is None or len(close) < 60:
+            return {
+                "current": None,
+                "ma50": None,
+                "distance_pct": None,
+                "change_20d_pp": None,
+                "state": "数据不足",
+            }
+
+        current = float(close.iloc[-1])
+        ma50 = float(close.rolling(50).mean().iloc[-1])
+        distance_pct = round((current / ma50 - 1) * 100, 2)
+        change_20d_pp = round(current - float(close.iloc[-21]), 2)
+
+        if distance_pct > 5 or change_20d_pp > 0.35:
+            state = "收益率上行"
+        elif distance_pct < -5 or change_20d_pp < -0.35:
+            state = "收益率下行"
+        else:
+            state = "收益率相对稳定"
+
+        return {
+            "current": round(current, 2),
+            "ma50": round(ma50, 2),
+            "distance_pct": distance_pct,
+            "change_20d_pp": change_20d_pp,
+            "state": state,
+        }
+
+    except Exception as e:
+        print(f"Failed to fetch rate metrics for {ticker}: {e}")
+        return {
+            "current": None,
+            "ma50": None,
+            "distance_pct": None,
+            "change_20d_pp": None,
+            "state": "数据不足",
+        }
+
+
+def score_trend_distance(distance_pct):
+    """趋势越弱，机会温度分越高。满分 35。"""
+    if distance_pct is None:
+        return None
+    if distance_pct >= 15:
+        return 2
+    if distance_pct >= 10:
+        return 5
+    if distance_pct >= 5:
+        return 8
+    if distance_pct >= 0:
+        return 12
+    if distance_pct >= -5:
+        return 18
+    if distance_pct >= -10:
+        return 25
+    if distance_pct >= -20:
+        return 31
+    return 35
+
+
+def score_rate_environment(rate):
+    """利率越明显上行，股票估值环境越不友好；利率回落则适度提高机会分。满分 25。"""
+    if rate.get("distance_pct") is None or rate.get("change_20d_pp") is None:
+        return None
+
+    distance = rate["distance_pct"]
+    change = rate["change_20d_pp"]
+
+    if distance > 8 or change > 0.50:
+        return 3
+    if distance > 3 or change > 0.20:
+        return 7
+    if distance < -8 or change < -0.50:
+        return 22
+    if distance < -3 or change < -0.20:
+        return 18
+    return 12
+
+
+def build_market_dashboard(vix, vxn, risk, spy_trend, qqq_trend, rate):
+    """
+    V1 市场机会温度：
+    - VIX/VXN 情绪压力 40%
+    - SPY/QQQ 200 日趋势 35%
+    - 10 年美债收益率环境 25%
+
+    分数越高 = 市场越偏冷/压力越大，并不等于确定的买入信号。
+    """
+    components = []
+
+    volatility_points = None
+    if risk.get("score") is not None:
+        volatility_points = round(risk["score"] / 100 * 40, 1)
+        components.append((volatility_points, 40))
+
+    trend_raw = [
+        score_trend_distance(spy_trend.get("distance_pct")),
+        score_trend_distance(qqq_trend.get("distance_pct")),
+    ]
+    trend_raw = [x for x in trend_raw if x is not None]
+    trend_points = round(sum(trend_raw) / len(trend_raw), 1) if trend_raw else None
+    if trend_points is not None:
+        components.append((trend_points, 35))
+
+    rate_points = score_rate_environment(rate)
+    if rate_points is not None:
+        components.append((rate_points, 25))
+
+    if not components:
+        score = None
+    else:
+        earned = sum(x[0] for x in components)
+        available = sum(x[1] for x in components)
+        score = round(earned / available * 100, 1)
+
+    if score is None:
+        state = "数据不足"
+        emoji = "⚪"
+        guidance = "关键数据不足，按既定长期投资计划执行，不基于单周缺失数据调整仓位。"
+    elif score < 25:
+        state = "偏热 / 平静"
+        emoji = "🟢"
+        guidance = "维持正常定投，不额外追涨；若有大额待投资现金，可继续分批而非一次性投入。"
+    elif score < 50:
+        state = "正常"
+        emoji = "🔵"
+        guidance = "维持既定资产配置与定投节奏，无需因为短期市场波动做明显调整。"
+    elif score < 75:
+        state = "偏冷 / 压力升高"
+        emoji = "🟡"
+        guidance = "继续正常定投；若本来就有预留投资现金，可考虑按既定计划适度分批增加投入。"
+    else:
+        state = "高压力 / 恐慌观察区"
+        emoji = "🔴"
+        guidance = "避免因恐慌卖出核心长期仓位；如有预留资金，可分批投入并检查资产配置是否需要再平衡。"
+
+    return {
+        "score": score,
+        "state": state,
+        "emoji": emoji,
+        "guidance": guidance,
+        "volatility_points": volatility_points,
+        "trend_points": trend_points,
+        "rate_points": rate_points,
+    }
+
+
+def build_dashboard_text(spy_trend, qqq_trend, rate, dashboard):
+    score_text = "数据不足" if dashboard["score"] is None else f"{dashboard['score']}/100"
+    return "\n".join([
+        f"- Market Opportunity Score：{score_text}",
+        f"- 综合状态：{dashboard['emoji']} {dashboard['state']}",
+        f"- SPY vs 200日均线：{metric_label(spy_trend['distance_pct'], '%')}（{spy_trend['state']}）",
+        f"- QQQ vs 200日均线：{metric_label(qqq_trend['distance_pct'], '%')}（{qqq_trend['state']}）",
+        f"- SPY 200日均线近20日变化：{metric_label(spy_trend['ma200_slope_20d'], '%')}",
+        f"- QQQ 200日均线近20日变化：{metric_label(qqq_trend['ma200_slope_20d'], '%')}",
+        f"- 美国10年期国债收益率：{metric_label(rate['current'], '%')}（{rate['state']}）",
+        f"- 10Y vs 50日均线：{metric_label(rate['distance_pct'], '%')}",
+        f"- 10Y 近20交易日变化：{metric_label(rate['change_20d_pp'], ' 个百分点')}",
+        f"- 长期投资者参考：{dashboard['guidance']}",
+    ])
+
+
+def build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard):
+    def row(label, value):
+        return f"""
+        <tr>
+            <td style="padding:9px 12px;border-bottom:1px solid #eeeeee;color:#444444;">{escape(label)}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid #eeeeee;text-align:right;font-weight:700;color:#111111;">
+                {escape(value)}
+            </td>
+        </tr>
+        """
+
+    score_text = "数据不足" if dashboard["score"] is None else f"{dashboard['score']}/100"
+
+    rows = ""
+    rows += row("SPY vs 200日均线", f"{metric_label(spy_trend['distance_pct'], '%')} · {spy_trend['state']}")
+    rows += row("QQQ vs 200日均线", f"{metric_label(qqq_trend['distance_pct'], '%')} · {qqq_trend['state']}")
+    rows += row("SPY 200日线近20日", metric_label(spy_trend["ma200_slope_20d"], "%"))
+    rows += row("QQQ 200日线近20日", metric_label(qqq_trend["ma200_slope_20d"], "%"))
+    rows += row("美国10年期国债收益率", f"{metric_label(rate['current'], '%')} · {rate['state']}")
+    rows += row("10Y vs 50日均线", metric_label(rate["distance_pct"], "%"))
+    rows += row("10Y 近20交易日变化", metric_label(rate["change_20d_pp"], " 个百分点"))
+
+    return f"""
+    <div style="margin:22px 0;background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;overflow:hidden;">
+        <div style="padding:14px 16px;background:#f7f8fa;border-bottom:1px solid #e8e8e8;font-size:17px;font-weight:700;color:#111111;">
+            🧭 市场机会仪表盘 · V1
+        </div>
+
+        <div style="padding:16px 16px 8px 16px;">
+            <div style="font-size:22px;font-weight:800;color:#111111;margin-bottom:6px;">
+                {escape(dashboard['emoji'])} {escape(dashboard['state'])}
+            </div>
+            <div style="font-size:14px;color:#555555;margin-bottom:4px;">
+                Market Opportunity Score：<strong>{escape(score_text)}</strong>
+            </div>
+            <div style="font-size:11px;color:#777777;line-height:1.6;">
+                V1 权重：VIX/VXN 40% · SPY/QQQ 200日趋势 35% · 10年美债收益率环境 25%
+            </div>
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            {rows}
+        </table>
+
+        <div style="padding:14px 16px;background:#fafafa;font-size:14px;line-height:1.7;color:#333333;">
+            <strong>长期投资者参考：</strong>{escape(dashboard['guidance'])}
+        </div>
+
+        <div style="padding:10px 16px 14px 16px;background:#fafafa;font-size:11px;line-height:1.6;color:#777777;">
+            注：该评分用于描述市场温度和压力，不预测短期涨跌，也不应单独作为清仓、满仓或短线择时依据。后续版本可再加入估值与市场宽度模块。
+        </div>
+    </div>
+    """
+
+
+def generate_ai_summary(market_text, stock_text, risk_text, dashboard_text):
     prompt = f"""
 你是一名稳健、长期主义风格的全球市场分析师。
 
-请基于以下一周市场数据与波动率数据，写一份简短中文投资市场周报。
+请基于以下一周市场数据、波动率数据与市场机会仪表盘，写一份简短中文投资市场周报。
 
 要求：
 1. 不要给短线交易建议。
 2. 不要预测市场一定上涨或下跌。
 3. 重点解释市场情绪、风险偏好、科技股表现、美国与非美国市场相对强弱。
-4. 结合 VIX 与 VXN 判断当前市场压力属于平静、正常、升温、高压力还是极端压力，并解释两者是否同步。
+4. 结合 VIX/VXN、SPY/QQQ 200日均线趋势和10年美债收益率环境，解释 Market Opportunity Score，而不是只看单一指标。
 5. 如果 VXN 明显高于 VIX，可以指出科技股隐含波动率相对更高，但不要把差值机械解释成未来涨跌方向。
 6. 可以给长期投资者“维持、正常定投、分批投入预留资金、检查再平衡”等参考。
 7. 不得仅凭 VIX/VXN 建议清仓、满仓、一次性重仓或进行短线择时。
-8. 语言适合长期指数投资者阅读。
-9. 总长度控制在 450-650 中文字。
-10. 最后加一句“长期投资者本周可关注：……”。
-11. 不要使用 Markdown 表格。
+8. Market Opportunity Score 越高只代表市场越偏冷或压力越大，不等于确定买点；不得把评分解释为短期预测。
+9. 语言适合长期指数投资者阅读。
+10. 总长度控制在 450-650 中文字。
+11. 最后加一句“长期投资者本周可关注：……”。
+12. 不要使用 Markdown 表格。
 
 美国与全球主要市场一周表现：
 {market_text}
@@ -318,6 +605,9 @@ def generate_ai_summary(market_text, stock_text, risk_text):
 
 市场风险温度：
 {risk_text}
+
+市场机会仪表盘：
+{dashboard_text}
 """
 
     try:
@@ -378,7 +668,13 @@ vxn = get_volatility_metrics("^VXN")
 risk = classify_risk(vix, vxn)
 risk_text = build_risk_text(vix, vxn, risk)
 
-ai_summary = generate_ai_summary(market_text, stock_text, risk_text)
+spy_trend = get_trend_metrics("SPY")
+qqq_trend = get_trend_metrics("QQQ")
+rate = get_rate_metrics("^TNX")
+dashboard = build_market_dashboard(vix, vxn, risk, spy_trend, qqq_trend, rate)
+dashboard_text = build_dashboard_text(spy_trend, qqq_trend, rate, dashboard)
+
+ai_summary = generate_ai_summary(market_text, stock_text, risk_text, dashboard_text)
 
 today = datetime.date.today()
 
@@ -389,13 +685,16 @@ plain_body = f"""
 一、市场风险温度
 {risk_text}
 
-二、美国与全球主要市场表现
+二、市场机会仪表盘
+{dashboard_text}
+
+三、美国与全球主要市场表现
 {market_text}
 
-三、美国头部公司表现
+四、美国头部公司表现
 {stock_text}
 
-四、AI 市场解读
+五、AI 市场解读
 {ai_summary}
 
 免责声明：
@@ -415,6 +714,8 @@ html_body = f"""
         </div>
 
         {build_risk_card(vix, vxn, risk)}
+
+        {build_market_dashboard_card(spy_trend, qqq_trend, rate, dashboard)}
 
         <div style="background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;padding:18px 18px;margin-bottom:22px;">
             <div style="font-size:17px;font-weight:700;margin-bottom:10px;color:#111111;">🧠 AI 市场解读</div>
@@ -448,4 +749,4 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.login(EMAIL_USER, EMAIL_PASS)
     server.sendmail(EMAIL_USER, EMAIL_TO, msg.as_string())
 
-print("Weekly market report with VIX/VXN risk temperature sent successfully.")
+print("Weekly market report with VIX/VXN + market opportunity dashboard sent successfully.")
