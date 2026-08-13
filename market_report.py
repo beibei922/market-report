@@ -4,6 +4,7 @@ import smtplib
 import csv
 import io
 import urllib.request
+import xml.etree.ElementTree as ET
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
@@ -386,53 +387,151 @@ def _rate_metrics_from_values(values, source):
     }
 
 
-def get_rate_metrics(ticker="^TNX"):
-    """
-    获取美国10年期国债收益率。
+def _fetch_treasury_10y_values():
+    """从美国财政部官方 Daily Treasury Par Yield Curve XML 获取 10Y 日度收益率。"""
+    year = datetime.date.today().year
+    url = (
+        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
+        f"?data=daily_treasury_yield_curve&field_tdr_date_value={year}"
+    )
 
-    主数据源：FRED DGS10（日度10年期美国国债恒定期限收益率）。
-    备用数据源：Yahoo Finance ^TNX。
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 market-report/2.2",
+            "Accept": "application/xml,text/xml,*/*",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=25) as response:
+        raw = response.read()
 
-    这样即使 Yahoo 在 GitHub Actions 中临时取数失败，周报仍可继续获得利率数据。
-    """
-    fred_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+    root = ET.fromstring(raw)
+    observations = []
 
-    # 1) 优先 FRED：官方宏观数据源，不需要 API Key。
-    try:
-        request = urllib.request.Request(
-            fred_url,
-            headers={"User-Agent": "Mozilla/5.0 market-report/1.0"},
-        )
-        with urllib.request.urlopen(request, timeout=20) as response:
-            text = response.read().decode("utf-8")
+    # Treasury XML 使用命名空间。这里通过 local-name 读取日期与 BC_10YEAR，
+    # 避免未来命名空间前缀变化导致解析失败。
+    for entry in root.iter():
+        if entry.tag.split("}")[-1] != "entry":
+            continue
 
-        reader = csv.DictReader(io.StringIO(text))
-        values = []
-        for row in reader:
-            raw = (row.get("DGS10") or "").strip()
-            if raw and raw != ".":
+        obs_date = None
+        ten_year = None
+        for elem in entry.iter():
+            local = elem.tag.split("}")[-1]
+            text = (elem.text or "").strip()
+            if local in ("NEW_DATE", "EffectiveDate", "Date") and text:
+                obs_date = text[:10]
+            elif local == "BC_10YEAR" and text:
                 try:
-                    values.append(float(raw))
+                    ten_year = float(text)
                 except ValueError:
                     pass
 
+        if ten_year is not None:
+            observations.append((obs_date or "", ten_year))
+
+    if not observations:
+        raise ValueError("Treasury XML contained no BC_10YEAR observations")
+
+    # 官方 feed 可能不是按旧->新排序，因此明确按日期排序。
+    observations.sort(key=lambda x: x[0])
+    return [value for _, value in observations]
+
+
+def _fetch_fred_10y_values():
+    """从 FRED DGS10 CSV 获取 10Y 日度收益率。"""
+    fred_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+    request = urllib.request.Request(
+        fred_url,
+        headers={
+            "User-Agent": "Mozilla/5.0 market-report/2.2",
+            "Accept": "text/csv,text/plain,*/*",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=25) as response:
+        text = response.read().decode("utf-8-sig")
+
+    reader = csv.DictReader(io.StringIO(text))
+    values = []
+    for row in reader:
+        raw = (row.get("DGS10") or "").strip()
+        if raw and raw != ".":
+            try:
+                values.append(float(raw))
+            except ValueError:
+                pass
+
+    if not values:
+        raise ValueError("FRED CSV contained no DGS10 observations")
+    return values
+
+
+def get_rate_metrics(ticker="^TNX"):
+    """
+    获取美国10年期国债收益率，并使用多层备用源：
+    1) U.S. Treasury 官方 Daily Treasury Par Yield Curve XML
+    2) FRED DGS10
+    3) Yahoo Finance ^TNX（download）
+    4) Yahoo Finance ^TNX（Ticker.history）
+
+    任一来源成功并取得至少60个交易日数据，即返回结果。
+    """
+    errors = []
+
+    # 1) 美国财政部官方数据
+    try:
+        values = _fetch_treasury_10y_values()
+        result = _rate_metrics_from_values(values, "U.S. Treasury")
+        if result is not None:
+            print(f"10Y rate source OK: U.S. Treasury ({len(values)} observations)")
+            return result
+        errors.append(f"Treasury: only {len(values)} usable observations")
+    except Exception as e:
+        errors.append(f"Treasury: {type(e).__name__}: {e}")
+
+    # 2) FRED DGS10
+    try:
+        values = _fetch_fred_10y_values()
         result = _rate_metrics_from_values(values, "FRED DGS10")
         if result is not None:
+            print(f"10Y rate source OK: FRED DGS10 ({len(values)} observations)")
             return result
-
-        print("FRED DGS10 returned insufficient observations; trying Yahoo fallback.")
+        errors.append(f"FRED: only {len(values)} usable observations")
     except Exception as e:
-        print(f"Failed to fetch FRED DGS10: {e}; trying Yahoo fallback.")
+        errors.append(f"FRED: {type(e).__name__}: {e}")
 
-    # 2) Yahoo 备用。
+    # 3) Yahoo download fallback
     try:
         close = get_close_series(ticker, period="1y")
         if close is not None:
-            result = _rate_metrics_from_values(close.tolist(), "Yahoo ^TNX (fallback)")
+            values = close.tolist()
+            result = _rate_metrics_from_values(values, "Yahoo ^TNX")
             if result is not None:
+                print(f"10Y rate source OK: Yahoo download ({len(values)} observations)")
                 return result
+            errors.append(f"Yahoo download: only {len(values)} usable observations")
+        else:
+            errors.append("Yahoo download: no close series")
     except Exception as e:
-        print(f"Failed to fetch Yahoo fallback {ticker}: {e}")
+        errors.append(f"Yahoo download: {type(e).__name__}: {e}")
+
+    # 4) Yahoo Ticker.history fallback（与 yf.download 走不同调用路径）
+    try:
+        hist = yf.Ticker(ticker).history(period="1y", auto_adjust=True)
+        if hist is not None and not hist.empty and "Close" in hist.columns:
+            values = hist["Close"].dropna().astype(float).tolist()
+            result = _rate_metrics_from_values(values, "Yahoo ^TNX history")
+            if result is not None:
+                print(f"10Y rate source OK: Yahoo history ({len(values)} observations)")
+                return result
+            errors.append(f"Yahoo history: only {len(values)} usable observations")
+        else:
+            errors.append("Yahoo history: no usable data")
+    except Exception as e:
+        errors.append(f"Yahoo history: {type(e).__name__}: {e}")
+
+    diagnostic = " | ".join(errors)
+    print("10Y RATE ALL SOURCES FAILED -> " + diagnostic)
 
     return {
         "current": None,
@@ -440,113 +539,9 @@ def get_rate_metrics(ticker="^TNX"):
         "distance_pct": None,
         "change_20d_pp": None,
         "state": "数据不足",
-        "source": "FRED / Yahoo 均失败",
+        "source": "全部数据源失败",
+        "diagnostic": diagnostic,
     }
-
-
-
-
-def get_valuation_metrics(ticker, neutral_forward_pe):
-    """
-    获取 ETF 的估值数据。优先使用 Yahoo Finance 的 Forward P/E，
-    若不可用则退回 Trailing P/E。
-
-    neutral_forward_pe 是本周报用于比较的简化中性锚点，
-    不是官方公允价值，也不是买卖阈值。
-    """
-    try:
-        info = yf.Ticker(ticker).info or {}
-
-        forward_pe = info.get("forwardPE")
-        trailing_pe = info.get("trailingPE")
-
-        pe = forward_pe if forward_pe not in (None, 0) else trailing_pe
-        pe_type = "Forward P/E" if forward_pe not in (None, 0) else "Trailing P/E"
-
-        if pe in (None, 0):
-            return {
-                "pe": None,
-                "pe_type": "数据不足",
-                "neutral_pe": neutral_forward_pe,
-                "ratio_to_neutral": None,
-                "state": "数据不足",
-            }
-
-        pe = float(pe)
-        ratio = pe / neutral_forward_pe
-
-        if ratio >= 1.30:
-            state = "明显偏贵"
-        elif ratio >= 1.15:
-            state = "偏贵"
-        elif ratio >= 1.00:
-            state = "略偏贵"
-        elif ratio >= 0.90:
-            state = "中性"
-        elif ratio >= 0.80:
-            state = "偏便宜"
-        else:
-            state = "明显偏便宜"
-
-        return {
-            "pe": round(pe, 2),
-            "pe_type": pe_type,
-            "neutral_pe": neutral_forward_pe,
-            "ratio_to_neutral": round(ratio, 3),
-            "state": state,
-        }
-
-    except Exception as e:
-        print(f"Failed to fetch valuation metrics for {ticker}: {e}")
-        return {
-            "pe": None,
-            "pe_type": "数据不足",
-            "neutral_pe": neutral_forward_pe,
-            "ratio_to_neutral": None,
-            "state": "数据不足",
-        }
-
-
-def score_valuation_metric(valuation):
-    """
-    估值越便宜，机会分越高。单个指数满分 25。
-    这里比较的是当前 P/E 与简化中性锚点的比例。
-    """
-    ratio = valuation.get("ratio_to_neutral")
-    if ratio is None:
-        return None
-    if ratio >= 1.30:
-        return 2
-    if ratio >= 1.15:
-        return 5
-    if ratio >= 1.00:
-        return 9
-    if ratio >= 0.90:
-        return 14
-    if ratio >= 0.80:
-        return 19
-    return 25
-
-
-def score_trend_distance(distance_pct):
-    """趋势越弱，机会温度分越高。满分 35。"""
-    if distance_pct is None:
-        return None
-    if distance_pct >= 15:
-        return 2
-    if distance_pct >= 10:
-        return 5
-    if distance_pct >= 5:
-        return 8
-    if distance_pct >= 0:
-        return 12
-    if distance_pct >= -5:
-        return 18
-    if distance_pct >= -10:
-        return 25
-    if distance_pct >= -20:
-        return 31
-    return 35
 
 
 def score_rate_environment(rate):
@@ -693,7 +688,7 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, spy_valuation, qqq_v
     return f"""
     <div style="margin:22px 0;background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;overflow:hidden;">
         <div style="padding:14px 16px;background:#f7f8fa;border-bottom:1px solid #e8e8e8;font-size:17px;font-weight:700;color:#111111;">
-            🧭 市场机会仪表盘 · V2.1
+            🧭 市场机会仪表盘 · V2.2.1
         </div>
 
         <div style="padding:16px 16px 8px 16px;">
