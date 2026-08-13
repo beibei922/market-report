@@ -1,6 +1,9 @@
 import os
 import datetime
 import smtplib
+import csv
+import io
+import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
@@ -353,49 +356,92 @@ def get_trend_metrics(ticker):
         }
 
 
+def _rate_metrics_from_values(values, source):
+    """根据日度 10Y 收益率序列计算当前值、50日均线与20交易日变化。"""
+    values = [float(x) for x in values if x is not None]
+    if len(values) < 60:
+        return None
+
+    current = values[-1]
+    ma50 = sum(values[-50:]) / 50
+    distance_pct = round((current / ma50 - 1) * 100, 2) if ma50 else None
+    change_20d_pp = round(current - values[-21], 2)
+
+    if distance_pct is None:
+        state = "数据不足"
+    elif distance_pct > 5 or change_20d_pp > 0.35:
+        state = "收益率上行"
+    elif distance_pct < -5 or change_20d_pp < -0.35:
+        state = "收益率下行"
+    else:
+        state = "收益率相对稳定"
+
+    return {
+        "current": round(current, 2),
+        "ma50": round(ma50, 2),
+        "distance_pct": distance_pct,
+        "change_20d_pp": change_20d_pp,
+        "state": state,
+        "source": source,
+    }
+
+
 def get_rate_metrics(ticker="^TNX"):
-    """观察 10 年期美债收益率当前值、20 个交易日变化及其相对 50 日均线位置。"""
+    """
+    获取美国10年期国债收益率。
+
+    主数据源：FRED DGS10（日度10年期美国国债恒定期限收益率）。
+    备用数据源：Yahoo Finance ^TNX。
+
+    这样即使 Yahoo 在 GitHub Actions 中临时取数失败，周报仍可继续获得利率数据。
+    """
+    fred_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+
+    # 1) 优先 FRED：官方宏观数据源，不需要 API Key。
+    try:
+        request = urllib.request.Request(
+            fred_url,
+            headers={"User-Agent": "Mozilla/5.0 market-report/1.0"},
+        )
+        with urllib.request.urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8")
+
+        reader = csv.DictReader(io.StringIO(text))
+        values = []
+        for row in reader:
+            raw = (row.get("DGS10") or "").strip()
+            if raw and raw != ".":
+                try:
+                    values.append(float(raw))
+                except ValueError:
+                    pass
+
+        result = _rate_metrics_from_values(values, "FRED DGS10")
+        if result is not None:
+            return result
+
+        print("FRED DGS10 returned insufficient observations; trying Yahoo fallback.")
+    except Exception as e:
+        print(f"Failed to fetch FRED DGS10: {e}; trying Yahoo fallback.")
+
+    # 2) Yahoo 备用。
     try:
         close = get_close_series(ticker, period="1y")
-
-        if close is None or len(close) < 60:
-            return {
-                "current": None,
-                "ma50": None,
-                "distance_pct": None,
-                "change_20d_pp": None,
-                "state": "数据不足",
-            }
-
-        current = float(close.iloc[-1])
-        ma50 = float(close.rolling(50).mean().iloc[-1])
-        distance_pct = round((current / ma50 - 1) * 100, 2)
-        change_20d_pp = round(current - float(close.iloc[-21]), 2)
-
-        if distance_pct > 5 or change_20d_pp > 0.35:
-            state = "收益率上行"
-        elif distance_pct < -5 or change_20d_pp < -0.35:
-            state = "收益率下行"
-        else:
-            state = "收益率相对稳定"
-
-        return {
-            "current": round(current, 2),
-            "ma50": round(ma50, 2),
-            "distance_pct": distance_pct,
-            "change_20d_pp": change_20d_pp,
-            "state": state,
-        }
-
+        if close is not None:
+            result = _rate_metrics_from_values(close.tolist(), "Yahoo ^TNX (fallback)")
+            if result is not None:
+                return result
     except Exception as e:
-        print(f"Failed to fetch rate metrics for {ticker}: {e}")
-        return {
-            "current": None,
-            "ma50": None,
-            "distance_pct": None,
-            "change_20d_pp": None,
-            "state": "数据不足",
-        }
+        print(f"Failed to fetch Yahoo fallback {ticker}: {e}")
+
+    return {
+        "current": None,
+        "ma50": None,
+        "distance_pct": None,
+        "change_20d_pp": None,
+        "state": "数据不足",
+        "source": "FRED / Yahoo 均失败",
+    }
 
 
 
@@ -614,7 +660,7 @@ def build_dashboard_text(spy_trend, qqq_trend, rate, spy_valuation, qqq_valuatio
         f"- QQQ vs 200日均线：{metric_label(qqq_trend['distance_pct'], '%')}（{qqq_trend['state']}）",
         f"- SPY 200日均线近20日变化：{metric_label(spy_trend['ma200_slope_20d'], '%')}",
         f"- QQQ 200日均线近20日变化：{metric_label(qqq_trend['ma200_slope_20d'], '%')}",
-        f"- 美国10年期国债收益率：{metric_label(rate['current'], '%')}（{rate['state']}）",
+        f"- 美国10年期国债收益率：{metric_label(rate['current'], '%')}（{rate['state']}，来源：{rate.get('source', '未知')}）",
         f"- 10Y vs 50日均线：{metric_label(rate['distance_pct'], '%')}",
         f"- 10Y 近20交易日变化：{metric_label(rate['change_20d_pp'], ' 个百分点')}",
         f"- 长期投资者参考：{dashboard['guidance']}",
@@ -640,14 +686,14 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, spy_valuation, qqq_v
     rows += row("QQQ vs 200日均线", f"{metric_label(qqq_trend['distance_pct'], '%')} · {qqq_trend['state']}")
     rows += row("SPY 200日线近20日", metric_label(spy_trend["ma200_slope_20d"], "%"))
     rows += row("QQQ 200日线近20日", metric_label(qqq_trend["ma200_slope_20d"], "%"))
-    rows += row("美国10年期国债收益率", f"{metric_label(rate['current'], '%')} · {rate['state']}")
+    rows += row("美国10年期国债收益率", f"{metric_label(rate['current'], '%')} · {rate['state']} · {rate.get('source', '未知')}")
     rows += row("10Y vs 50日均线", metric_label(rate["distance_pct"], "%"))
     rows += row("10Y 近20交易日变化", metric_label(rate["change_20d_pp"], " 个百分点"))
 
     return f"""
     <div style="margin:22px 0;background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;overflow:hidden;">
         <div style="padding:14px 16px;background:#f7f8fa;border-bottom:1px solid #e8e8e8;font-size:17px;font-weight:700;color:#111111;">
-            🧭 市场机会仪表盘 · V2
+            🧭 市场机会仪表盘 · V2.1
         </div>
 
         <div style="padding:16px 16px 8px 16px;">
@@ -658,7 +704,7 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, spy_valuation, qqq_v
                 Market Opportunity Score：<strong>{escape(score_text)}</strong>
             </div>
             <div style="font-size:11px;color:#777777;line-height:1.6;">
-                V2 权重：VIX/VXN 30% · 估值 25% · SPY/QQQ 200日趋势 25% · 10年美债收益率环境 20%
+                V2.1 权重：VIX/VXN 30% · 估值 25% · SPY/QQQ 200日趋势 25% · 10年美债收益率环境 20%
             </div>
         </div>
 
@@ -859,4 +905,4 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.login(EMAIL_USER, EMAIL_PASS)
     server.sendmail(EMAIL_USER, EMAIL_TO, msg.as_string())
 
-print("Weekly market report with VIX/VXN + valuation + market opportunity dashboard V2 sent successfully.")
+print("Weekly market report with VIX/VXN + valuation + market opportunity dashboard V2.1 sent successfully.")
