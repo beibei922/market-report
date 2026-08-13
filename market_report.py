@@ -544,6 +544,85 @@ def get_rate_metrics(ticker="^TNX"):
     }
 
 
+
+def get_valuation_metrics(ticker, neutral_forward_pe):
+    """
+    获取 ETF 的估值数据。优先使用 Yahoo Finance 的 Forward P/E，
+    若不可用则退回 Trailing P/E。
+
+    neutral_forward_pe 是本周报用于比较的简化中性锚点，
+    不是官方公允价值，也不是买卖阈值。
+    """
+    try:
+        info = yf.Ticker(ticker).info or {}
+
+        forward_pe = info.get("forwardPE")
+        trailing_pe = info.get("trailingPE")
+
+        pe = forward_pe if forward_pe not in (None, 0) else trailing_pe
+        pe_type = "Forward P/E" if forward_pe not in (None, 0) else "Trailing P/E"
+
+        if pe in (None, 0):
+            return {
+                "pe": None,
+                "pe_type": "数据不足",
+                "neutral_pe": neutral_forward_pe,
+                "ratio_to_neutral": None,
+                "state": "数据不足",
+            }
+
+        pe = float(pe)
+        ratio = pe / neutral_forward_pe
+
+        if ratio >= 1.30:
+            state = "明显偏贵"
+        elif ratio >= 1.15:
+            state = "偏贵"
+        elif ratio >= 1.00:
+            state = "略偏贵"
+        elif ratio >= 0.90:
+            state = "中性"
+        elif ratio >= 0.80:
+            state = "偏便宜"
+        else:
+            state = "明显偏便宜"
+
+        return {
+            "pe": round(pe, 2),
+            "pe_type": pe_type,
+            "neutral_pe": neutral_forward_pe,
+            "ratio_to_neutral": round(ratio, 3),
+            "state": state,
+        }
+
+    except Exception as e:
+        print(f"Failed to fetch valuation metrics for {ticker}: {e}")
+        return {
+            "pe": None,
+            "pe_type": "数据不足",
+            "neutral_pe": neutral_forward_pe,
+            "ratio_to_neutral": None,
+            "state": "数据不足",
+        }
+
+
+def score_valuation_metric(valuation):
+    """估值越便宜，机会分越高；单个指数满分 25。"""
+    ratio = valuation.get("ratio_to_neutral")
+    if ratio is None:
+        return None
+    if ratio >= 1.30:
+        return 2
+    if ratio >= 1.15:
+        return 5
+    if ratio >= 1.00:
+        return 9
+    if ratio >= 0.90:
+        return 14
+    if ratio >= 0.80:
+        return 19
+    return 25
+
 def score_rate_environment(rate):
     """利率越明显上行，股票估值环境越不友好；利率回落则适度提高机会分。满分 25。"""
     if rate.get("distance_pct") is None or rate.get("change_20d_pp") is None:
@@ -688,7 +767,7 @@ def build_market_dashboard_card(spy_trend, qqq_trend, rate, spy_valuation, qqq_v
     return f"""
     <div style="margin:22px 0;background:#ffffff;border:1px solid #e8e8e8;border-radius:14px;overflow:hidden;">
         <div style="padding:14px 16px;background:#f7f8fa;border-bottom:1px solid #e8e8e8;font-size:17px;font-weight:700;color:#111111;">
-            🧭 市场机会仪表盘 · V2.2.1
+            🧭 市场机会仪表盘 · V2.3.2.1
         </div>
 
         <div style="padding:16px 16px 8px 16px;">
