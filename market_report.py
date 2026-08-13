@@ -322,7 +322,7 @@ def generate_ai_summary(market_text, stock_text, risk_text):
 
     try:
         response = client.chat.completions.create(
-            model="grok-4.3",
+            model="grok-4.6",
             messages=[
                 {
                     "role": "system",
