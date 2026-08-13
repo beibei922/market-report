@@ -623,6 +623,27 @@ def score_valuation_metric(valuation):
         return 19
     return 25
 
+def score_trend_distance(distance_pct):
+    """趋势越弱，机会温度分越高。原始满分 35，V2 中会再缩放到 25 分。"""
+    if distance_pct is None:
+        return None
+    if distance_pct >= 15:
+        return 2
+    if distance_pct >= 10:
+        return 5
+    if distance_pct >= 5:
+        return 8
+    if distance_pct >= 0:
+        return 12
+    if distance_pct >= -5:
+        return 18
+    if distance_pct >= -10:
+        return 25
+    if distance_pct >= -20:
+        return 31
+    return 35
+
+
 def score_rate_environment(rate):
     """利率越明显上行，股票估值环境越不友好；利率回落则适度提高机会分。满分 25。"""
     if rate.get("distance_pct") is None or rate.get("change_20d_pp") is None:
