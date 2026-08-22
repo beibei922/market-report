@@ -1,0 +1,52 @@
+name: Monthly Investment Report
+
+on:
+  schedule:
+    # 每周六北京时间 08:30 检查一次；只有每月第一个周六真正运行。
+    - cron: "30 8 * * 6"
+      timezone: "Asia/Shanghai"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check first Saturday
+        id: first_saturday
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            DAY=$(TZ=Asia/Shanghai date +%d)
+            DAY=$((10#$DAY))
+            if [ "$DAY" -le 7 ]; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Checkout repository
+        if: steps.first_saturday.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.first_saturday.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        if: steps.first_saturday.outputs.run == 'true'
+        run: pip install yfinance pandas openai
+
+      - name: Run monthly investment report
+        if: steps.first_saturday.outputs.run == 'true'
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: python monthly_market_report.py
